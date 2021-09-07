@@ -1,0 +1,2 @@
+boto3
+-e git+https://github.com/simonwoerpel/mmmeta.git@develop#egg=mmmeta
