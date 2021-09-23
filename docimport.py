@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 import shutil
@@ -10,6 +11,12 @@ from botocore.exceptions import ClientError
 from mmmeta import mmmeta
 
 DATA_DIR = os.path.abspath('./data')
+
+
+def json_encoder(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError('Could not encode to %s JSON' % obj)
 
 
 def sync_meta_s3(bucket_name, s3_dir):
@@ -109,7 +116,7 @@ def process_file(collection, bucket, s3_dir, file_row, target_dir):
     }
 
     with open(meta_path, 'w') as f:
-        json.dump(fc_meta, f)
+        json.dump(fc_meta, f, default=json_encoder)
 
     return [pdf_path, meta_path]
 
