@@ -20,7 +20,7 @@ def json_encoder(obj):
 
 
 def sync_meta_s3(bucket_name, s3_dir):
-    resource = boto3.resource('s3')
+    resource = boto3.resource('s3', endpoint_url=os.environ["ARCHIVE_ENDPOINT_URL"])
     bucket = resource.Bucket(bucket_name)
     prefix = '{}/_mmmeta'.format(s3_dir)
     for obj in bucket.objects.filter(Prefix=prefix):
@@ -42,20 +42,16 @@ def get_new_files(m):
         yield file
 
 
-def get_key(s3_dir, file, ext='pdf'):
-    return '{s3_dir}/{filename}.data.{ext}'.format(
-        s3_dir=s3_dir,
-        filename=file['content_hash'],
-        ext=ext
-    )
+def get_key(file):
+    return file.remote.s3_key
 
 
-def download_file(bucket, s3_dir, file, target_dir):
+def download_file(bucket, file, target_dir):
     ext = 'pdf'
-    key = get_key(s3_dir, file, ext=ext)
+    key = get_key(file)
     print('Downloading key', key)
 
-    resource = boto3.resource('s3')
+    resource = boto3.resource('s3', endpoint_url=os.environ["ARCHIVE_ENDPOINT_URL"])
     bucket = resource.Bucket(bucket)
 
     path = os.path.abspath(
@@ -83,7 +79,7 @@ def ellipse(s, n=500):
 
 
 def process_file(collection, bucket, s3_dir, file_row, target_dir):
-    pdf_path = download_file(bucket, s3_dir, file_row, target_dir)
+    pdf_path = download_file(bucket, file_row, target_dir)
     if pdf_path is None:
         return
     metadata = file_row._data
@@ -145,8 +141,14 @@ def run_update(bucket, s3_dir):
     m.update()
     print('create column')
     m.files.create_column_by_example('imported', False)
-    m.files.create_column_by_example('__deleted', False)
     return m
+
+
+def mark_imported(m, batch):
+    m.files.update_many(
+        [{"content_hash": c, "imported": 1} for c in batch],
+        ['content_hash']
+    )
 
 
 def main():
@@ -167,12 +169,11 @@ def main():
         batch.append(file_row['content_hash'])
         if len(batch) == BATCH_SIZE:
             call_import(command, target_dir)
-            m.files.update_many(
-                [{"content_hash": c, "imported": 1} for c in batch],
-                ['content_hash']
-            )
+            mark_imported(m, batch)
             batch = []
-    call_import(command, target_dir)
+    if batch:
+        call_import(command, target_dir)
+        mark_imported(m, batch)
 
 
 if __name__ == "__main__":
