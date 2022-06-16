@@ -1,6 +1,8 @@
+import argparse
 from datetime import datetime
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -55,7 +57,7 @@ def download_file(bucket, file, target_dir):
     bucket = resource.Bucket(bucket)
 
     path = os.path.abspath(
-        os.path.join(target_dir, '{}.{}'.format(file['content_hash'], ext))
+        target_dir / '{}.{}'.format(file['content_hash'], ext)
     )
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if os.path.exists(path):
@@ -78,7 +80,7 @@ def ellipse(s, n=500):
     return s
 
 
-def process_file(collection, bucket, s3_dir, file_row, target_dir):
+def process_file(collection: str, bucket: str, file_row, target_dir: Path, tag=None):
     pdf_path = download_file(bucket, file_row, target_dir)
     if pdf_path is None:
         return
@@ -93,6 +95,7 @@ def process_file(collection, bucket, s3_dir, file_row, target_dir):
         'published_at': metadata['published_at'],
         'language': 'de',
         'allow_annotation': True,
+        'tags': [tag] if tag else [],
         'properties': {
             'title': metadata['title'],
             'foreign_id': metadata['foreign_id'],
@@ -118,7 +121,7 @@ def process_file(collection, bucket, s3_dir, file_row, target_dir):
 
 
 def call_import(command, target_dir):
-    if not os.path.exists(target_dir):
+    if not target_dir.exists():
         return
     call_args = command.split(' ')
     print('Running import')
@@ -152,17 +155,27 @@ def mark_imported(m, batch):
 
 
 def main():
-    BATCH_SIZE = 100
-    collection = sys.argv[1]
-    s3_bucket = sys.argv[2]
-    s3_dir = sys.argv[3]
-    target_dir = sys.argv[4]
-    command = sys.argv[5]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--collection", type=str)
+    parser.add_argument("--bucket", type=str)
+    parser.add_argument("--dir", type=str)
+    parser.add_argument("--tag", default=None, type=str)
+    parser.add_argument("--target", type=Path)
+    parser.add_argument("--command", type=str)
+    args = parser.parse_args()
+    collection = args.collection
+    s3_bucket = args.bucket
+    s3_dir = args.dir
+    target_dir = args.target
+    command = args.command
+
     m = run_update(s3_bucket, s3_dir)
+
+    BATCH_SIZE = 100
     batch = []
     for file_row in get_new_files(m):
         result = process_file(
-            collection, s3_bucket, s3_dir, file_row, target_dir
+            collection, s3_bucket, file_row, target_dir, tag=args.tag
         )
         if result is None:
             continue
