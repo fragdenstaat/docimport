@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--collection", type=str)
     parser.add_argument("--bucket", type=str)
     parser.add_argument("--dir", type=str)
-    parser.add_argument("--tag", default=None, type=str)
+    parser.add_argument("--tag", default='', type=str, nargs='?', const='')
     parser.add_argument("--target", type=Path)
     parser.add_argument("--command", type=str)
     args = parser.parse_args()
